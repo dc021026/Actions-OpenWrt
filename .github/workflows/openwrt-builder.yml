@@ -64,10 +64,15 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P1_SH
 
     - name: Update feeds
-      run: cd openwrt && ./scripts/feeds update -a
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds update -a
 
     - name: Install feeds
-      run: cd openwrt && ./scripts/feeds install -a
+      run: |
+        cd openwrt
+        ./scripts/feeds install -a
 
     - name: Load custom configuration
       run: |
@@ -108,7 +113,7 @@ jobs:
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
         else
-          echo "Build failed: No firmware output found"
+          echo "WARNING: No firmware output directory found"
           exit 1
         fi
 
@@ -124,11 +129,10 @@ jobs:
       if: env.UPLOAD_RELEASE == 'true' && steps.organize.outputs.status == 'success' && !cancelled()
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: CR660X-$(date +"%Y.%m.%d-%H%M")
+        tag_name: CR660X-${{ github.run_number }}
         body: |
           # CR660X 固件发布
           
-          **编译时间**: $(date '+%Y-%m-%d %H:%M:%S')
           **设备**: 小米路由器 CR660X
           **SoC**: MediaTek MT7621
           
@@ -153,4 +157,4 @@ jobs:
       uses: Mattraks/delete-workflow-runs@v2
       with:
         retain_days: 0
-        keep_minimum_runs: 2
+        keep_minimum_runs: 3
