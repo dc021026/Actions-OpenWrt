@@ -1,25 +1,8 @@
-#
-# Based on https://github.com/P3TERX/Actions-OpenWrt
-# Modified for Xiaomi Mi Router CR660X
-#
-# File: .github/workflows/build-cr660x.yml
-# Description: Build OpenWrt firmware for CR660X using GitHub Actions
-#
-
 name: Build CR660X Firmware
 
 on:
   repository_dispatch:
   workflow_dispatch:
-    inputs:
-      device:
-        description: 'Device model'
-        required: false
-        default: 'cr660x'
-        type: choice
-        options:
-          - cr660x
-          - ac2100
   push:
     branches:
       - master
@@ -36,8 +19,6 @@ env:
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
-  DEVICE_MODEL: xiaomi_mi-router-cr660x
-  UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
@@ -49,17 +30,6 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@main
-
-    - name: Determine device
-      id: device
-      run: |
-        if [ "${{ github.event.inputs.device }}" == "ac2100" ]; then
-          echo "model=xiaomi_mi-router-ac2100" >> $GITHUB_OUTPUT
-          echo "name=AC2100" >> $GITHUB_OUTPUT
-        else
-          echo "model=xiaomi_mi-router-cr660x" >> $GITHUB_OUTPUT
-          echo "name=CR660X" >> $GITHUB_OUTPUT
-        fi
 
     - name: Initialization environment
       env:
@@ -81,8 +51,6 @@ jobs:
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-        cd openwrt
-        echo "OPENWRT_ROOT=$PWD" >> $GITHUB_ENV
 
     - name: Load custom feeds
       run: |
@@ -105,28 +73,12 @@ jobs:
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
-    - name: Generate CR660X config
-      if: success()
-      run: |
-        cd openwrt
-        cat >> .config << 'EOF'
-        CONFIG_TARGET_ramips=y
-        CONFIG_TARGET_ramips_mt7621=y
-        CONFIG_TARGET_ramips_mt7621_DEVICE_${{ steps.device.outputs.model }}=y
-        CONFIG_DEFAULT_TARGET_OPTIMIZATION="-O2 -march=octeon -mtune=octeon"
-        CONFIG_DEFAULT_PACKAGE_KMOD_MT7915_FIRMWARE=y
-        CONFIG_DEFAULT_PACKAGE_WPAD_OPENSSL=y
-        CONFIG_DEFAULT_PACKAGE_UBOOT_ENVTOOLS=y
-        CONFIG_PACKAGE_luci=y
-        CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
-        EOF
-        make defconfig
-
     - name: Download package
       id: package
       run: |
         cd openwrt
-        make download -j8 V=s
+        make defconfig
+        make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
@@ -144,14 +96,6 @@ jobs:
     - name: Check space usage
       if: (!cancelled())
       run: df -hT
-
-    - name: Upload bin directory
-      uses: actions/upload-artifact@main
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
-      with:
-        name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: openwrt/bin
-        retention-days: 30
 
     - name: Organize files
       id: organize
@@ -177,48 +121,35 @@ jobs:
         echo "release_tag=CR660X-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
         touch release.txt
         cat >> release.txt << 'EOF'
-        ## CR660X Firmware Release
+        ## CR660X 固件 - 集成 helloworld 最新代理工具
         
-        ### Device Information
-        - **Device**: Xiaomi Mi Router CR660X
-        - **SoC**: MediaTek MT7621
-        - **Flash**: NAND 256MB
-        - **RAM**: 512MB
+        **设备**: 小米路由器 CR660X
+        **SoC**: MediaTek MT7621
+        **编译时间**: $(date '+%Y-%m-%d %H:%M:%S')
         
-        ### Build Information
-        - **Repo**: coolsnowwolf/lede
-        - **Branch**: master
-        - **Build Time**: $(date '+%Y-%m-%d %H:%M:%S')
+        ### 集成工具
+        - ✅ Xray (V2Ray)
+        - ✅ ShadowsocksR (SSR)
+        - ✅ LuCI 管理界面
         
-        ### Installation Instructions
+        ### 刷机说明
         
-        #### First Time Installation (Factory)
-        1. Access router's web interface or use Xiaomi's official tool
-        2. Upload `*factory.bin` image
-        3. Wait for reboot
+        **首次刷机**:
+        - 下载 `*factory.bin` 文件
+        - 通过路由器官方界面或小米工具刷入
         
-        #### Upgrade from OpenWrt
-        1. SSH: `ssh root@192.168.1.1`
-        2. Upload: `scp *sysupgrade.tar root@192.168.1.1:/tmp/`
-        3. Execute: `cd /tmp && sysupgrade -n *sysupgrade.tar`
-        
-        ### Default Settings
-        - **IP Address**: 192.168.1.1
-        - **Username**: root
-        - **Password**: password
-        
-        ### Included Packages
-        - kmod-mt7915-firmware (WiFi 6 support)
-        - wpad-openssl (WiFi authentication)
-        - uboot-envtools (U-Boot environment)
-        - LuCI (Web interface)
-        - Chinese localization
-        
-        ### Verification
-        Use SHA256SUMS to verify file integrity:
+        **从 OpenWrt 升级**:
         ```bash
-        sha256sum -c SHA256SUMS
+        ssh root@192.168.1.1
+        scp *sysupgrade.tar root@192.168.1.1:/tmp/
+        ssh root@192.168.1.1
+        cd /tmp && sysupgrade -n *sysupgrade.tar
         ```
+        
+        **默认设置**:
+        - IP: 192.168.1.1
+        - 用户: root
+        - 密码: password
         
         EOF
         echo "status=success" >> $GITHUB_OUTPUT
